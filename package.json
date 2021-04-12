@@ -4,7 +4,7 @@
   "files": [
     "dist/main.js",
     "dist/main.js.map",
-    "dist/pindex.d.ts"
+    "dist/pidex.d.ts"
   ],
   "main": "dist/main.js",
   "types": "dist/pinex.d.ts",
