@@ -1,0 +1,52 @@
+{
+  "name": "pinex",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "types": "dist/pinex.d.ts",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.13.14",
+    "@babel/plugin-transform-modules-commonjs": "^7.13.8",
+    "@babel/preset-env": "^7.13.12",
+    "@microsoft/api-extractor": "^7.13.4",
+    "@types/jest": "^26.0.22",
+    "@types/lodash.get": "^4.4.6",
+    "@types/lodash.set": "^4.3.6",
+    "@types/node": "^14.14.37",
+    "@types/webpack": "^5.28.0",
+    "@vue/composition-api": "^1.0.0-rc.6",
+    "@vue/test-utils": "^1.1.3",
+    "closure-webpack-plugin": "^2.5.0",
+    "google-closure-compiler": "^20210302.0.0",
+    "jest": "^26.6.3",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^2.2.1",
+    "rimraf": "^3.0.2",
+    "ts-jest": "^26.5.4",
+    "ts-loader": "^8.1.0",
+    "ts-node": "^9.1.1",
+    "typescript": "^4.2.3",
+    "vue": "^2",
+    "vue-jest": "^3.0.7",
+    "vue-template-compiler": "^2.6.12",
+    "vuex": "^3",
+    "webpack": "^5.31.0",
+    "webpack-cli": "^4.6.0"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@vue/composition-api": "^1.0.0-rc.6",
+    "vue": "^2",
+    "vuex": "^3"
+  },
+  "scripts": {
+    "test": "jest",
+    "build": "run-s clean build:js build:dts build:post-clean",
+    "clean": "rimraf dist",
+    "build:js": "webpack",
+    "build:dts": "api-extractor run --local --verbose",
+    "build:post-clean": "rimraf dist/types",
+    "watch:build": "webpack --watch",
+    "watch": "run-s build watch:build"
+  }
+}
