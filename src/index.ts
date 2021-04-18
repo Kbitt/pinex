@@ -1,9 +1,18 @@
 import { computed, reactive, unref } from '@vue/composition-api'
 import { PluginObject } from 'vue'
 import { ActionTree, GetterTree, MutationTree, Store, Module } from 'vuex'
-import { get, set } from './getset'
+import { createPatchState, get, set } from './getset'
 import { createProxy } from './proxy'
 import { getStore, setStore } from './store'
+
+export type SubscribeCallback<S> = (
+  state: S,
+  newPartialState: Partial<S>
+) => void
+
+export type StoreWithState<S> = S & {
+  $subscribe(cb: SubscribeCallback<S>): void
+}
 
 export type StoreWithGetters<G> = {
   [k in keyof G]: G[k] extends (this: infer This, store?: any) => infer R
@@ -30,12 +39,15 @@ export const defineStore = <
   state?: () => S
   getters?: G & ThisType<Readonly<S & StoreWithGetters<G>>>
   actions?: A & ThisType<S & Readonly<A & StoreWithGetters<G>>>
-}): (() => S & Readonly<StoreWithGetters<G> & StoreWithActions<A>>) => {
+}): (() => StoreWithState<S> &
+  Readonly<StoreWithGetters<G> & StoreWithActions<A>>) => {
   let store: Store<any>
   const setup = () => {
     const stateKeys = state ? Object.keys(state()) : []
     const getterKeys = getters ? Object.keys(getters) : []
     const actionKeys = actions ? Object.keys(actions) : []
+
+    const subscribeCallbacks: SubscribeCallback<S>[] = []
 
     if (
       typeof process !== 'undefined' &&
@@ -111,18 +123,30 @@ export const defineStore = <
       actions: actionTree,
     }
 
-    let pinexStore: any = {}
+    let pinexStore: any = {
+      $subscribe: (cb: SubscribeCallback<any>) => {
+        subscribeCallbacks.push(cb)
+      },
+    }
 
     stateKeys.forEach(key => {
       pinexStore[key] = computed({
         get: () => {
-          const path = [...id.split('/'), key].join('.')
+          const path = [id, key].join('.')
           const value = get(store.state, path)
           if (typeof value !== 'object') {
             return value
           }
           return createProxy([value], {
             setter: (propKey, value) => {
+              const innerPath = [key, propKey].filter(Boolean).join('.')
+              subscribeCallbacks.forEach(cb => {
+                const rawState = JSON.parse(
+                  JSON.stringify(get(store.state, id))
+                )
+                const patchState = createPatchState(rawState, innerPath, value)
+                cb(rawState, patchState)
+              })
               store.commit(`${id}/SET_STATE`, {
                 key: [key, propKey].filter(Boolean).join('.') || undefined,
                 value,
@@ -131,6 +155,15 @@ export const defineStore = <
           })
         },
         set: value => {
+          subscribeCallbacks.forEach(cb => {
+            const rawState = unref(get(store.state, key))
+            const patchState = createPatchState(
+              rawState,
+              [id, key].join('.'),
+              value
+            )
+            cb(rawState, patchState)
+          })
           store.commit(`${id}/SET_STATE`, { key, value })
         },
       })

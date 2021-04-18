@@ -502,5 +502,45 @@ describe('index', () => {
         expect(vuexStore.state.abc.value.foo).toBe(value)
       })
     })
+
+    describe('subscribe', () => {
+      it('it calls with correct patch state', () => {
+        const useStore = defineStore({
+          id: 'foo',
+          state: () => ({
+            a: {
+              b: {
+                value: 123,
+              },
+            },
+          }),
+        })
+
+        const store = useStore()
+
+        const subscribeSpy = jest.fn()
+
+        store.$subscribe(subscribeSpy)
+
+        store.a.b.value = 111
+
+        expect(subscribeSpy).toHaveBeenCalledWith(
+          {
+            a: {
+              b: {
+                value: 123,
+              },
+            },
+          },
+          {
+            a: {
+              b: {
+                value: 111,
+              },
+            },
+          }
+        )
+      })
+    })
   })
 })

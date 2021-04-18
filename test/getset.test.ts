@@ -1,4 +1,4 @@
-import { get, set } from '../src/getset'
+import { createPatchState, get, set } from '../src/getset'
 
 describe('get', () => {
   const data: [any, string, any][] = [
@@ -59,6 +59,36 @@ describe('set', () => {
     it('should throw - ' + index, () => {
       const testFn = set.bind(null, ...[...args, null])
       expect(testFn).toThrow()
+    })
+  })
+})
+
+describe('createPatchState', () => {
+  it('works', () => {
+    const state = {
+      a: {},
+      b: { b0: { b1: { value: 123 } } },
+      c: {},
+    }
+
+    const patch = createPatchState(state, 'b.b0.b1.value', 444)
+
+    expect(patch).toEqual({
+      b: { b0: { b1: { value: 444 } } },
+    })
+  })
+
+  it('works with branched object', () => {
+    const state = {
+      a: { a0: { a1: { vv: 4444 } } },
+      b: { b0: { b1: { value: 123 } } },
+      c: { c0: { c1: { cccc: 4389493 } } },
+    }
+
+    const patch = createPatchState(state, 'b.b0.b1.value', 444)
+
+    expect(patch).toEqual({
+      b: { b0: { b1: { value: 444 } } },
     })
   })
 })
