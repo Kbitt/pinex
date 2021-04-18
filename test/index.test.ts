@@ -3,6 +3,7 @@ import PinexPlugin, { defineStore } from '../src'
 import { defineComponent } from '@vue/composition-api'
 import { shallowMount } from '@vue/test-utils'
 import { Store } from 'vuex'
+import { getSetterMutation } from '../src/mutations'
 
 describe('index', () => {
   let localVue: ReturnType<typeof getLocalVue>
@@ -69,7 +70,7 @@ describe('index', () => {
         const input = wrapper.element as HTMLInputElement
         expect('123').toEqual(input.value)
 
-        vuexStore.commit('abc/SET_STATE', { value: { value: 321 } })
+        vuexStore.commit(getSetterMutation('abc'), { value: { value: 321 } })
 
         await localVue.nextTick()
 
@@ -88,7 +89,10 @@ describe('index', () => {
 
         const store = useStore()
 
-        vuexStore.commit('abc/SET_STATE', { key: 'value', value: { foo: 123 } })
+        vuexStore.commit(getSetterMutation('abc'), {
+          key: 'value',
+          value: { foo: 123 },
+        })
 
         expect(store.value!.foo).toBe(123)
       })
@@ -105,7 +109,10 @@ describe('index', () => {
 
         const store = useStore()
 
-        vuexStore.commit('abc/SET_STATE', { key: 'value', value: { foo: 123 } })
+        vuexStore.commit(getSetterMutation('abc'), {
+          key: 'value',
+          value: { foo: 123 },
+        })
 
         expect(store.value!.foo).toBe(123)
 
@@ -125,7 +132,10 @@ describe('index', () => {
         const store = useStore()
 
         expect([...store.value]).toStrictEqual([1, 2, 3])
-        vuexStore.commit('abc/SET_STATE', { key: 'value', value: [4, 5, 6] })
+        vuexStore.commit(getSetterMutation('abc'), {
+          key: 'value',
+          value: [4, 5, 6],
+        })
 
         expect([...store.value]).toStrictEqual([4, 5, 6])
       })
@@ -169,7 +179,10 @@ describe('index', () => {
 
         const store = useStore()
 
-        vuexStore.commit('abc/SET_STATE', { key: 'value.0.n', value: 13 })
+        vuexStore.commit(getSetterMutation('abc'), {
+          key: 'value.0.n',
+          value: 13,
+        })
 
         expect([...store.value]).toStrictEqual([{ n: 13 }, { n: 2 }, { n: 3 }])
       })
@@ -259,7 +272,7 @@ describe('index', () => {
         const input = wrapper.element as HTMLInputElement
         expect('124').toEqual(input.value)
 
-        vuexStore.commit('abc/SET_STATE', { value: { value: 321 } })
+        vuexStore.commit(getSetterMutation('abc'), { value: { value: 321 } })
 
         await localVue.nextTick()
         expect('322').toBe(input.value)
@@ -308,7 +321,7 @@ describe('index', () => {
 
         const store = useB()
 
-        vuexStore.commit('a/SET_STATE', { value: { value } })
+        vuexStore.commit(getSetterMutation('a'), { value: { value } })
 
         expect(store.aValue).toBe(value)
       })
@@ -347,7 +360,7 @@ describe('index', () => {
         expect(callCount).toBe(1)
         aval = store.aValue
         expect(callCount).toBe(1)
-        vuexStore.commit('a/SET_STATE', { value: { value } })
+        vuexStore.commit(getSetterMutation('a'), { value: { value } })
         aval = store.aValue
 
         expect(callCount).toBe(2)
@@ -389,7 +402,7 @@ describe('index', () => {
         const values = [28282, 181, 1, 12939, 20, 2030303, 2291]
 
         for (let value of values) {
-          vuexStore.commit('a/SET_STATE', { value: { value } })
+          vuexStore.commit(getSetterMutation('a'), { value: { value } })
 
           await localVue.nextTick()
 
@@ -423,9 +436,392 @@ describe('index', () => {
 
         const store = useB()
 
-        vuexStore.commit('a/SET_STATE', { value: { value } })
+        vuexStore.commit(getSetterMutation('a'), { value: { value } })
 
         expect(store.aValue).toBe(value)
+      })
+    })
+
+    describe('computed', () => {
+      describe('getters', () => {
+        it('works', () => {
+          const useStore = defineStore({
+            id: 'abc',
+            computed: {
+              value: () => 123,
+            },
+          })
+
+          const Component = defineComponent({
+            template: `
+              <input :value="store.value">
+            `,
+            setup: () => {
+              const store = useStore()
+
+              return { store }
+            },
+          })
+
+          const wrapper = shallowMount(Component, {
+            localVue,
+            store: vuexStore,
+          })
+          const input = wrapper.element as HTMLInputElement
+          expect('123').toEqual(input.value)
+        })
+
+        it('is reactive', async () => {
+          const useStore = defineStore({
+            id: 'abc',
+            state: () => ({
+              value: 123,
+            }),
+            computed: {
+              next() {
+                return this.value + 1
+              },
+            },
+          })
+
+          const Component = defineComponent({
+            template: `
+              <input :value="store.next">
+            `,
+            setup: () => {
+              const store = useStore()
+
+              return { store }
+            },
+          })
+
+          const wrapper = shallowMount(Component, {
+            localVue,
+            store: vuexStore,
+          })
+          const input = wrapper.element as HTMLInputElement
+          expect('124').toEqual(input.value)
+
+          vuexStore.commit(getSetterMutation('abc'), { value: { value: 321 } })
+
+          await localVue.nextTick()
+          expect('322').toBe(input.value)
+        })
+
+        it('can access other store state', () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({
+              value: 123,
+            }),
+          })
+
+          const useB = defineStore({
+            id: 'b',
+            computed: {
+              aValue() {
+                return useA().value
+              },
+            },
+          })
+
+          const store = useB()
+
+          expect(store.aValue).toBe(123)
+        })
+
+        it('is reactive to other store state', () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({
+              value: 123,
+            }),
+          })
+
+          const useB = defineStore({
+            id: 'b',
+            computed: {
+              aValue() {
+                return useA().value
+              },
+            },
+          })
+
+          const value = 383939
+
+          const store = useB()
+
+          vuexStore.commit(getSetterMutation('a'), { value: { value } })
+
+          expect(store.aValue).toBe(value)
+        })
+
+        it('only reacts to other store state updates', () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({
+              value: 123,
+            }),
+          })
+
+          let callCount = 0
+
+          const useB = defineStore({
+            id: 'b',
+            computed: {
+              aValue() {
+                callCount++
+                return useA().value
+              },
+            },
+          })
+
+          const value = 383939
+
+          const store = useB()
+
+          expect(callCount).toBe(1)
+
+          let aval = store.aValue
+          aval = store.aValue
+          aval = store.aValue
+          aval = store.aValue
+
+          expect(callCount).toBe(1)
+          aval = store.aValue
+          expect(callCount).toBe(1)
+          vuexStore.commit(getSetterMutation('a'), { value: { value } })
+          aval = store.aValue
+
+          expect(callCount).toBe(2)
+          aval = store.aValue
+          expect(callCount).toBe(2)
+          aval = store.aValue
+          expect(callCount).toBe(2)
+        })
+
+        it('component reacts to other store state', async () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({
+              value: 123,
+            }),
+          })
+
+          const useB = defineStore({
+            id: 'b',
+            getters: {
+              aValue() {
+                return useA().value
+              },
+            },
+          })
+
+          const Component = defineComponent({
+            template: `
+              <input :value="store.aValue">
+            `,
+            setup: () => {
+              const store = useB()
+              return { store }
+            },
+          })
+
+          const wrapper = shallowMount(Component, { localVue })
+
+          const values = [28282, 181, 1, 12939, 20, 2030303, 2291]
+
+          for (let value of values) {
+            vuexStore.commit(getSetterMutation('a'), { value: { value } })
+
+            await localVue.nextTick()
+
+            expect((wrapper.element as HTMLInputElement).value).toBe('' + value)
+          }
+        })
+
+        it('is reactive to other store getter', () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({
+              value: 123,
+            }),
+            computed: {
+              getterValue() {
+                return this.value
+              },
+            },
+          })
+
+          const useB = defineStore({
+            id: 'b',
+            computed: {
+              aValue() {
+                return useA().getterValue
+              },
+            },
+          })
+
+          const value = 383939
+
+          const store = useB()
+
+          vuexStore.commit(getSetterMutation('a'), { value: { value } })
+
+          expect(store.aValue).toBe(value)
+        })
+      })
+
+      describe('setters', () => {
+        it('works', () => {
+          const useStore = defineStore({
+            id: 'foo',
+            state: () => ({
+              value: 123,
+            }),
+            computed: {
+              next: {
+                get() {
+                  return this.value + 1
+                },
+                set(value: number) {
+                  this.value = value - 1
+                },
+              },
+            },
+          })
+
+          const store = useStore()
+
+          const value = Math.floor(Math.random() * 1000)
+
+          store.next = value
+
+          expect(vuexStore.state.foo.value).toBe(value - 1)
+        })
+
+        it('can call action in setter', () => {
+          const useStore = defineStore({
+            id: 'foo',
+            state: () => ({
+              value: 123,
+            }),
+            actions: {
+              setNext(next: number) {
+                this.value = next - 1
+              },
+            },
+            computed: {
+              next: {
+                get() {
+                  return this.value + 1
+                },
+                set(value: number) {
+                  this.setNext(value)
+                },
+              },
+            },
+          })
+
+          const store = useStore()
+
+          const value = Math.floor(Math.random() * 1000)
+
+          store.next = value
+
+          expect(vuexStore.state.foo.value).toBe(value - 1)
+        })
+
+        it('can call getter in setter', () => {
+          const useStore = defineStore({
+            id: 'foo',
+            state: () => ({
+              value: 123,
+            }),
+            getters: {
+              nextValue() {
+                return this.value + 1
+              },
+            },
+            computed: {
+              next: {
+                get() {
+                  return this.value + 1
+                },
+                set(value: number) {
+                  this.value = this.nextValue
+                },
+              },
+            },
+          })
+
+          const store = useStore()
+
+          store.next = 443343
+
+          expect(vuexStore.state.foo.value).toBe(124)
+        })
+
+        it('can proxy access to another store state', () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({ value: 'abc' }),
+          })
+
+          const useB = defineStore({
+            id: 'b',
+            computed: {
+              value: {
+                get() {
+                  return useA().value
+                },
+                set(value: string) {
+                  useA().value = value
+                },
+              },
+            },
+          })
+
+          const a = useA(),
+            b = useB()
+
+          const value = 'xyz'
+
+          b.value = value
+
+          expect(a.value).toBe(value)
+          expect(vuexStore.state.a.value).toBe(value)
+        })
+
+        it('has proxy reactive to other store state change', () => {
+          const useA = defineStore({
+            id: 'a',
+            state: () => ({ value: 'abc' }),
+          })
+
+          const useB = defineStore({
+            id: 'b',
+            computed: {
+              value: {
+                get() {
+                  return useA().value
+                },
+                set(value: string) {
+                  useA().value = value
+                },
+              },
+            },
+          })
+
+          const a = useA(),
+            b = useB()
+
+          const value = 'xyz'
+
+          vuexStore.commit(getSetterMutation('a'), { key: 'value', value })
+
+          expect(b.value).toBe(value)
+        })
       })
     })
 
@@ -493,7 +889,10 @@ describe('index', () => {
 
         const store = useStore()
 
-        vuexStore.commit('abc/SET_STATE', { key: 'value', value: { foo: 123 } })
+        vuexStore.commit(getSetterMutation('abc'), {
+          key: 'value',
+          value: { foo: 123 },
+        })
 
         const value = 4343434
 

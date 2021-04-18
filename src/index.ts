@@ -1,7 +1,8 @@
-import { computed, reactive, unref } from '@vue/composition-api'
+import { computed, reactive, toRefs, unref } from '@vue/composition-api'
 import { PluginObject } from 'vue'
 import { ActionTree, GetterTree, MutationTree, Store, Module } from 'vuex'
 import { createPatchState, get, set } from './getset'
+import { getSetterAction, getSetterMutation } from './mutations'
 import { createProxy } from './proxy'
 import { getStore, setStore } from './store'
 
@@ -17,85 +18,145 @@ export type StoreWithState<S> = S & {
 export type StoreWithGetters<G> = {
   [k in keyof G]: G[k] extends (this: infer This, store?: any) => infer R
     ? R
-    : never
+    : {}
 }
 export type StoreWithActions<A> = {
   [k in keyof A]: A[k] extends (...args: infer P) => infer R
     ? (...args: P) => R
+    : {}
+}
+
+export type ComputedProperties<C> = {
+  [K in keyof C]: C[K] extends ComputedProperty<any>
+    ? ComputedProperty<any>
     : never
+}
+
+export type SettableComputed<R> = {
+  get(): R
+  set(value: R): any
+}
+
+export type ReadonlyComputed<R> = {
+  (): R
+}
+
+export type ComputedProperty<R> = SettableComputed<R> | ReadonlyComputed<R>
+
+export type StoreWithComputed<C> = {
+  [K in keyof C]: C[K] extends ComputedProperty<infer R> ? R : never
 }
 
 export const defineStore = <
   S extends Record<string | number | symbol, any>,
   G,
-  A
+  A,
+  C
 >({
   id,
   state,
   getters,
   actions,
+  ...options
 }: {
   id: string
   state?: () => S
   getters?: G & ThisType<Readonly<S & StoreWithGetters<G>>>
   actions?: A & ThisType<S & Readonly<A & StoreWithGetters<G>>>
+  computed?: C & ThisType<C & S & Readonly<A & StoreWithGetters<G>>>
 }): (() => StoreWithState<S> &
-  Readonly<StoreWithGetters<G> & StoreWithActions<A>>) => {
+  Readonly<StoreWithGetters<G> & StoreWithActions<A>> &
+  StoreWithComputed<C>) => {
   let store: Store<any>
   const setup = () => {
-    const stateKeys = state ? Object.keys(state()) : []
-    const getterKeys = getters ? Object.keys(getters) : []
-    const actionKeys = actions ? Object.keys(actions) : []
+    const defaultState = state ? state() : {}
+
+    let pinexStore: any = {
+      $subscribe: (cb: SubscribeCallback<any>) => {
+        subscribeCallbacks.push(cb)
+      },
+    }
 
     const subscribeCallbacks: SubscribeCallback<S>[] = []
 
-    if (
-      typeof process !== 'undefined' &&
-      process.env?.NODE_ENV !== 'production'
-    ) {
-      const keySet: Record<string, boolean> = {}
-      stateKeys.forEach(key => keySet[key])
-      let hasDuplicates = false
-      getterKeys.forEach(key => {
-        if (keySet[key]) {
-          hasDuplicates = true
-          console.error(`Duplicate getter key: '${key}'.`)
-        } else {
-          keySet[key] = true
-        }
-      })
+    const actionTree: ActionTree<S, any> = {}
 
-      actionKeys.forEach(key => {
-        if (keySet[key]) {
-          hasDuplicates = true
-          console.error(`Duplicate action key: '${key}'.`)
-        } else {
-          keySet[key] = true
-        }
-      })
+    for (const key in actions || {}) {
+      actionTree[key] = (_, payload) => {
+        const a = (actions as any)[key] as Function
 
-      if (hasDuplicates) {
-        console.error(
-          'Duplicate store keys detected. Store state/getter/action keys must all be unique. This check will not occur in production.'
-        )
+        return a.apply(pinexStore, payload)
       }
+      Object.defineProperty(pinexStore, key, {
+        enumerable: true,
+        value: (...args: any[]) => store.dispatch(id + '/' + key, args),
+      })
     }
 
     const getterTree: GetterTree<S, any> = {}
-    getterKeys
-      .filter(key => !key.includes('.'))
-      .forEach(key => {
-        getterTree[key] = (s: any, g: any) => {
-          const proxy = {} as any
-          stateKeys.forEach(sk => (proxy[sk] = computed(() => s[sk])))
-          getterKeys.forEach(gk => (proxy[gk] = computed(() => g[gk])))
-          const getterMethod = (getters as any)[key] as Function
-          return getterMethod.call(reactive(proxy))
+
+    for (const key in getters || {}) {
+      getterTree[key] = (s: any, g: any) => {
+        const proxy = {} as any
+        for (const sk in defaultState) {
+          proxy[sk] = computed(() => s[sk])
         }
+        for (const gk in getters || {}) {
+          proxy[gk] = computed(() => g[gk])
+        }
+        for (const gk in options.computed || {}) {
+          proxy[gk] = computed(() => g[gk])
+        }
+        const getterMethod = (getters as any)[key] as Function
+        return getterMethod.call(reactive(proxy))
+      }
+      pinexStore[key] = computed(() => store.getters[id + '/' + key])
+    }
+
+    for (const key in options.computed || {}) {
+      let computedMethod: Function
+      if (typeof (options.computed as any)[key] === 'object') {
+        const prop = (options.computed as any)[key] as SettableComputed<any>
+        if (!prop.get || !prop.set) {
+          throw new Error(
+            'Expected get and set to be defined on computed property'
+          )
+        }
+
+        actionTree[getSetterAction(key)] = (_, payload) => {
+          return prop.set.call(pinexStore, payload)
+        }
+
+        computedMethod = prop.get
+      } else {
+        computedMethod = (options.computed as any)[key]
+      }
+
+      getterTree[key] = (s: any, g: any) => {
+        const proxy = {} as any
+        for (const sk in defaultState) {
+          proxy[sk] = computed(() => s[sk])
+        }
+        for (const gk in getters || {}) {
+          proxy[gk] = computed(() => g[gk])
+        }
+        for (const ck in options.computed || {}) {
+          proxy[ck] = computed(() => g[ck])
+        }
+        return computedMethod.call(reactive(proxy))
+      }
+
+      pinexStore[key] = computed({
+        get: () => store.getters[id + '/' + key],
+        set: value => store.dispatch(getSetterAction(key, id), value),
       })
+    }
 
     const mutations: MutationTree<S> = {
-      SET_STATE: (state, { key, value }: { key: string; value: any }) => {
+      [getSetterMutation()]: (
+        state,
+        { key, value }: { key: string; value: any }
+      ) => {
         if (!key) {
           Object.entries(value).forEach(([key, val]) => {
             ;(state as any)[key] = val
@@ -106,15 +167,6 @@ export const defineStore = <
       },
     }
 
-    const actionTree: ActionTree<S, any> = {}
-    actionKeys.forEach(ak => {
-      actionTree[ak] = (_, payload) => {
-        const a = (actions as any)[ak] as Function
-
-        return a.apply(pinexStore, payload)
-      }
-    })
-
     const vuexStore = {
       namespaced: true,
       state,
@@ -123,13 +175,7 @@ export const defineStore = <
       actions: actionTree,
     }
 
-    let pinexStore: any = {
-      $subscribe: (cb: SubscribeCallback<any>) => {
-        subscribeCallbacks.push(cb)
-      },
-    }
-
-    stateKeys.forEach(key => {
+    for (const key in defaultState) {
       pinexStore[key] = computed({
         get: () => {
           const path = [id, key].join('.')
@@ -147,7 +193,7 @@ export const defineStore = <
                 const patchState = createPatchState(rawState, innerPath, value)
                 cb(rawState, patchState)
               })
-              store.commit(`${id}/SET_STATE`, {
+              store.commit(getSetterMutation(id), {
                 key: [key, propKey].filter(Boolean).join('.') || undefined,
                 value,
               })
@@ -164,21 +210,11 @@ export const defineStore = <
             )
             cb(rawState, patchState)
           })
-          store.commit(`${id}/SET_STATE`, { key, value })
+          store.commit(getSetterMutation(id), { key, value })
         },
       })
-    })
+    }
 
-    getterKeys.forEach(
-      key => (pinexStore[key] = computed(() => store.getters[id + '/' + key]))
-    )
-
-    actionKeys.forEach(key => {
-      Object.defineProperty(pinexStore, key, {
-        enumerable: true,
-        value: (...args: any[]) => store.dispatch(id + '/' + key, args),
-      })
-    })
     return [pinexStore, vuexStore]
   }
 
