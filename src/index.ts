@@ -4,6 +4,7 @@ import { ActionTree, GetterTree, Module, MutationTree, Store } from 'vuex'
 import { createPatchState, get, set } from './getset'
 import { getSetterAction, getSetterMutation } from './mutations'
 import { createProxy } from './proxy'
+import { defineState } from './state'
 import { getStore, setStore } from './store'
 import {
   SettableComputed,
@@ -16,27 +17,31 @@ import {
 
 export const defineStore = <
   S extends Record<string | number | symbol, any>,
+  P extends Record<string | number | symbol, any>,
   G,
   A,
   C
 >({
   id,
   state,
+  privateState,
   getters,
   actions,
   ...options
 }: {
   id: string
   state?: () => S
-  getters?: G & ThisType<Readonly<S & StoreWithGetters<G>>>
-  actions?: A & ThisType<S & Readonly<A & StoreWithGetters<G>>>
-  computed?: C & ThisType<C & S & Readonly<A & StoreWithGetters<G>>>
+  privateState?: () => P
+  getters?: G & ThisType<Readonly<S & P & StoreWithGetters<G>>>
+  actions?: A & ThisType<S & P & Readonly<A & StoreWithGetters<G>>>
+  computed?: C & ThisType<C & S & P & Readonly<A & StoreWithGetters<G>>>
 }): (() => StoreWithState<S> &
   Readonly<StoreWithGetters<G> & StoreWithActions<A>> &
   StoreWithComputed<C>) => {
   let store: Store<any>
   const setup = () => {
     const defaultState = state ? state() : {}
+    const defaultPrivateState = privateState ? privateState() : {}
 
     let pinexStore: any = {
       $subscribe: (cb: SubscribeCallback<any>) => {
@@ -136,50 +141,24 @@ export const defineStore = <
 
     const vuexStore = {
       namespaced: true,
-      state,
+      state:
+        state || privateState
+          ? () => ({
+              ...(state ? state() : {}),
+              ...(privateState ? privateState() : {}),
+            })
+          : undefined,
       getters: getterTree,
       mutations,
       actions: actionTree,
     }
 
     for (const key in defaultState) {
-      pinexStore[key] = computed({
-        get: () => {
-          const path = [id, key].join('.')
-          const value = get(store.state, path)
-          if (typeof value !== 'object') {
-            return value
-          }
-          return createProxy([value], {
-            setter: (propKey, value) => {
-              const innerPath = [key, propKey].filter(Boolean).join('.')
-              subscribeCallbacks.forEach(cb => {
-                const rawState = JSON.parse(
-                  JSON.stringify(get(store.state, id))
-                )
-                const patchState = createPatchState(rawState, innerPath, value)
-                cb(rawState, patchState)
-              })
-              store.commit(getSetterMutation(id), {
-                key: [key, propKey].filter(Boolean).join('.') || undefined,
-                value,
-              })
-            },
-          })
-        },
-        set: value => {
-          subscribeCallbacks.forEach(cb => {
-            const rawState = unref(get(store.state, key))
-            const patchState = createPatchState(
-              rawState,
-              [id, key].join('.'),
-              value
-            )
-            cb(rawState, patchState)
-          })
-          store.commit(getSetterMutation(id), { key, value })
-        },
-      })
+      defineState(id, pinexStore, () => store, key, subscribeCallbacks)
+    }
+
+    for (const key in defaultPrivateState) {
+      defineState(id, pinexStore, () => store, key, subscribeCallbacks)
     }
 
     return [pinexStore, vuexStore]
