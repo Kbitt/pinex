@@ -18,23 +18,6 @@ export type StoreWithActions<A> = {
     : {}
 }
 
-export type ComputedProperties<C> = {
-  [K in keyof C]: C[K] extends ComputedProperty<any>
-    ? ComputedProperty<any>
-    : never
-}
-
-export type SettableComputed<R> = {
-  get(): R
-  set(value: R): any
-}
-
-export type ReadonlyComputed<R> = {
-  (): R
-}
-
-export type ComputedProperty<R> = SettableComputed<R> | ReadonlyComputed<R>
-
 export type StoreWithComputed<C> = {
-  [K in keyof C]: C[K] extends ComputedProperty<infer R> ? R : never
+  [K in keyof C]: C[K] extends () => infer R ? R : C[K]
 }

@@ -213,6 +213,54 @@ describe('index', () => {
       })
     })
 
+    describe('private state', () => {
+      it('works', () => {
+        const useStore = defineStore({
+          id: 'abc',
+          privateState: () => ({
+            myValue: 123,
+          }),
+          computed: {
+            get value(): number {
+              return this.myValue
+            },
+            set value(value) {
+              this.myValue = value
+            },
+          },
+        })
+
+        const store = useStore()
+
+        expect(store.value).toBe(123)
+      })
+
+      it('can be set', () => {
+        const useStore = defineStore({
+          id: 'abc',
+          privateState: () => ({
+            myValue: 123,
+          }),
+          computed: {
+            get value(): number {
+              return this.myValue
+            },
+            set value(value) {
+              this.myValue = value
+            },
+          },
+        })
+
+        const store = useStore()
+
+        const value = 444
+
+        store.value = value
+
+        expect(vuexStore.state.abc.myValue).toBe(value)
+      })
+    })
+
     describe('getters', () => {
       it('works', () => {
         const useStore = defineStore({
@@ -680,13 +728,11 @@ describe('index', () => {
               value: 123,
             }),
             computed: {
-              next: {
-                get() {
-                  return this.value + 1
-                },
-                set(value: number) {
-                  this.value = value - 1
-                },
+              get next(): number {
+                return this.value + 1
+              },
+              set next(value) {
+                this.value = value - 1
               },
             },
           })
@@ -712,13 +758,11 @@ describe('index', () => {
               },
             },
             computed: {
-              next: {
-                get() {
-                  return this.value + 1
-                },
-                set(value: number) {
-                  this.setNext(value)
-                },
+              get next(): number {
+                return this.value + 1
+              },
+              set next(value) {
+                this.setNext(value)
               },
             },
           })
@@ -744,13 +788,11 @@ describe('index', () => {
               },
             },
             computed: {
-              next: {
-                get() {
-                  return this.value + 1
-                },
-                set(value: number) {
-                  this.value = this.nextValue
-                },
+              get next(): number {
+                return this.value + 1
+              },
+              set next(value) {
+                this.value = this.nextValue
               },
             },
           })
@@ -771,13 +813,11 @@ describe('index', () => {
           const useB = defineStore({
             id: 'b',
             computed: {
-              value: {
-                get() {
-                  return useA().value
-                },
-                set(value: string) {
-                  useA().value = value
-                },
+              get value(): string {
+                return useA().value
+              },
+              set value(value) {
+                useA().value = value
               },
             },
           })
@@ -802,13 +842,11 @@ describe('index', () => {
           const useB = defineStore({
             id: 'b',
             computed: {
-              value: {
-                get() {
-                  return useA().value
-                },
-                set(value: string) {
-                  useA().value = value
-                },
+              get value(): string {
+                return useA().value
+              },
+              set value(value) {
+                useA().value = value
               },
             },
           })

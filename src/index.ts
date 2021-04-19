@@ -1,13 +1,11 @@
-import { computed, reactive, unref } from '@vue/composition-api'
+import { computed, reactive } from '@vue/composition-api'
 import { PluginObject } from 'vue'
 import { ActionTree, GetterTree, Module, MutationTree, Store } from 'vuex'
-import { createPatchState, get, set } from './getset'
+import { set } from './getset'
 import { getSetterAction, getSetterMutation } from './mutations'
-import { createProxy } from './proxy'
 import { defineState } from './state'
 import { getStore, setStore } from './store'
 import {
-  SettableComputed,
   StoreWithActions,
   StoreWithComputed,
   StoreWithGetters,
@@ -43,7 +41,7 @@ export const defineStore = <
     const defaultState = state ? state() : {}
     const defaultPrivateState = privateState ? privateState() : {}
 
-    let pinexStore: any = {
+    const pxStore: any = {
       $subscribe: (cb: SubscribeCallback<any>) => {
         subscribeCallbacks.push(cb)
       },
@@ -57,9 +55,9 @@ export const defineStore = <
       actionTree[key] = (_, payload) => {
         const a = (actions as any)[key] as Function
 
-        return a.apply(pinexStore, payload)
+        return a.apply(pxStore, payload)
       }
-      Object.defineProperty(pinexStore, key, {
+      Object.defineProperty(pxStore, key, {
         enumerable: true,
         value: (...args: any[]) => store.dispatch(id + '/' + key, args),
       })
@@ -82,31 +80,38 @@ export const defineStore = <
         const getterMethod = (getters as any)[key] as Function
         return getterMethod.call(reactive(proxy))
       }
-      pinexStore[key] = computed(() => store.getters[id + '/' + key])
+      pxStore[key] = computed(() => store.getters[id + '/' + key])
     }
 
     for (const key in options.computed || {}) {
       let computedMethod: Function
-      if (typeof (options.computed as any)[key] === 'object') {
-        const prop = (options.computed as any)[key] as SettableComputed<any>
-        if (!prop.get || !prop.set) {
+      const property = Object.getOwnPropertyDescriptor(options.computed, key)!
+      if (property.set) {
+        if (!property.get) {
           throw new Error(
             'Expected get and set to be defined on computed property'
           )
         }
 
         actionTree[getSetterAction(key)] = (_, payload) => {
-          return prop.set.call(pinexStore, payload)
+          return property.set!.call(pxStore, payload)
         }
 
-        computedMethod = prop.get
+        computedMethod = property.get
+      } else if (property.value && typeof property.value === 'function') {
+        computedMethod = property.value
       } else {
-        computedMethod = (options.computed as any)[key]
+        throw new Error(
+          `Property ${key} not defined with getter or value for store id: ${id}`
+        )
       }
 
       getterTree[key] = (s: any, g: any) => {
         const proxy = {} as any
         for (const sk in defaultState) {
+          proxy[sk] = computed(() => s[sk])
+        }
+        for (const sk in defaultPrivateState) {
           proxy[sk] = computed(() => s[sk])
         }
         for (const gk in getters || {}) {
@@ -118,7 +123,7 @@ export const defineStore = <
         return computedMethod.call(reactive(proxy))
       }
 
-      pinexStore[key] = computed({
+      pxStore[key] = computed({
         get: () => store.getters[id + '/' + key],
         set: value => store.dispatch(getSetterAction(key, id), value),
       })
@@ -154,14 +159,14 @@ export const defineStore = <
     }
 
     for (const key in defaultState) {
-      defineState(id, pinexStore, () => store, key, subscribeCallbacks)
+      defineState(id, pxStore, () => store, key, subscribeCallbacks)
     }
 
     for (const key in defaultPrivateState) {
-      defineState(id, pinexStore, () => store, key, subscribeCallbacks)
+      defineState(id, pxStore, () => store, key, subscribeCallbacks)
     }
 
-    return [pinexStore, vuexStore]
+    return [pxStore, vuexStore]
   }
 
   let pinexStore: any | undefined = undefined
@@ -173,7 +178,10 @@ export const defineStore = <
 
   return () => {
     if (!pinexStore) {
-      ;[pinexStore, vuexStoreConfig] = setup()
+      const [pStore, config] = setup()
+
+      pinexStore = reactive(pStore)
+      vuexStoreConfig = config
     }
 
     store = getStore()
@@ -182,12 +190,12 @@ export const defineStore = <
       store.registerModule(modulePath, vuexStoreConfig!)
     }
 
-    pinexStore = reactive(pinexStore)
-
     if (!gettersPrimed) {
-      Object.keys(vuexStoreConfig?.getters ?? {}).forEach(key => {
-        const _ = pinexStore[key].value
-      })
+      if (vuexStoreConfig!.getters) {
+        for (const key in vuexStoreConfig!.getters) {
+          const _ = pinexStore[key] && pinexStore[key].value
+        }
+      }
       gettersPrimed = true
     }
     return pinexStore
