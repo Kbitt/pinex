@@ -259,6 +259,19 @@ describe('index', () => {
 
         expect(vuexStore.state.abc.myValue).toBe(value)
       })
+
+      it('not accessible from store', () => {
+        const useStore = defineStore({
+          id: 'foo',
+          privateState: () => ({
+            value: 123,
+          }),
+        })
+
+        const store = useStore()
+
+        expect('value' in store).toBe(false)
+      })
     })
 
     describe('getters', () => {

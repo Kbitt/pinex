@@ -1,11 +1,9 @@
 import { Configuration } from 'webpack'
-const ClosureWebpackPlugin: any = require('closure-webpack-plugin')
 
 const config: Configuration = {
-  mode: 'development',
+  mode: 'production',
   target: 'node',
   entry: './src/index.ts',
-  devtool: 'source-map',
   resolve: {
     // Add `.ts` and `.tsx` as a resolvable extension.
     extensions: ['.ts', '.tsx', '.js'],

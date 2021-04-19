@@ -1,4 +1,4 @@
-import { computed, reactive } from '@vue/composition-api'
+import { computed, reactive, toRefs } from '@vue/composition-api'
 import { PluginObject } from 'vue'
 import { ActionTree, GetterTree, Module, MutationTree, Store } from 'vuex'
 import { set } from './getset'
@@ -52,10 +52,22 @@ export const defineStore = <
     const actionTree: ActionTree<S, any> = {}
 
     for (const key in actions || {}) {
-      actionTree[key] = (_, payload) => {
+      actionTree[key] = ({ state, commit }, payload) => {
         const a = (actions as any)[key] as Function
 
-        return a.apply(pxStore, payload)
+        const psProxy = {} as any
+        for (const k in defaultPrivateState) {
+          psProxy[k] = computed({
+            get: () => state[k],
+            set: value => commit(getSetterMutation(), { key: k, value }),
+          })
+        }
+        const proxy = reactive({
+          ...toRefs(pxStore),
+          ...psProxy,
+        })
+
+        return a.apply(proxy, payload)
       }
       Object.defineProperty(pxStore, key, {
         enumerable: true,
@@ -69,6 +81,9 @@ export const defineStore = <
       getterTree[key] = (s: any, g: any) => {
         const proxy = {} as any
         for (const sk in defaultState) {
+          proxy[sk] = computed(() => s[sk])
+        }
+        for (const sk in defaultPrivateState) {
           proxy[sk] = computed(() => s[sk])
         }
         for (const gk in getters || {}) {
@@ -93,8 +108,19 @@ export const defineStore = <
           )
         }
 
-        actionTree[getSetterAction(key)] = (_, payload) => {
-          return property.set!.call(pxStore, payload)
+        actionTree[getSetterAction(key)] = ({ state, commit }, payload) => {
+          const psProxy = {} as any
+          for (const k in defaultPrivateState) {
+            psProxy[k] = computed({
+              get: () => state[k],
+              set: value => commit(getSetterMutation(), { key: k, value }),
+            })
+          }
+          const proxy = reactive({
+            ...toRefs(pxStore),
+            ...psProxy,
+          })
+          return property.set!.call(proxy, payload)
         }
 
         computedMethod = property.get
@@ -109,6 +135,9 @@ export const defineStore = <
       getterTree[key] = (s: any, g: any) => {
         const proxy = {} as any
         for (const sk in defaultState) {
+          proxy[sk] = computed(() => s[sk])
+        }
+        for (const sk in defaultPrivateState) {
           proxy[sk] = computed(() => s[sk])
         }
         for (const sk in defaultPrivateState) {
@@ -135,9 +164,7 @@ export const defineStore = <
         { key, value }: { key: string; value: any }
       ) => {
         if (!key) {
-          Object.entries(value).forEach(([key, val]) => {
-            ;(state as any)[key] = val
-          })
+          Object.assign(state, value)
         } else {
           set(state, key, value)
         }
@@ -159,10 +186,6 @@ export const defineStore = <
     }
 
     for (const key in defaultState) {
-      defineState(id, pxStore, () => store, key, subscribeCallbacks)
-    }
-
-    for (const key in defaultPrivateState) {
       defineState(id, pxStore, () => store, key, subscribeCallbacks)
     }
 
