@@ -5,41 +5,93 @@ import { set } from './getset'
 import { getSetterAction, getSetterMutation } from './mutations'
 import { defineState } from './state'
 import { getStore, setStore } from './store'
-import {
-  StoreWithActions,
-  StoreWithComputed,
-  StoreWithGetters,
-  StoreWithState,
-  SubscribeCallback,
-} from './types'
+import { StoreDefinition, SubscribeCallback, UsePinexStore } from './types'
+
+export const isUseStore = (
+  def?: any
+): def is UsePinexStore<any, any, any, any, any, any> => {
+  if (!def) {
+    return false
+  }
+
+  return typeof def === 'function'
+}
+
+const getState = <S, E>(
+  options: StoreDefinition<any, any, any, any, any, any>
+): S &
+  (E extends StoreDefinition<infer SE, any, any, any, any, any> ? SE : {}) => {
+  const { state } = options
+  const extended = options.extends as
+    | StoreDefinition<any, any, any, any, any, any>
+    | undefined
+  const extendedState = extended?.state
+  return {
+    ...(state ? state() : {}),
+    ...(extendedState ? extendedState() : {}),
+  }
+}
+
+const getPrivateState = <P, E>(
+  options: StoreDefinition<any, P, any, any, any, E>
+): P &
+  (E extends StoreDefinition<any, infer PE, any, any, any, any> ? PE : {}) => {
+  const { privateState } = options
+  const extended = options.extends as
+    | StoreDefinition<any, any, any, any, any, any>
+    | undefined
+  const extendedState = extended?.privateState
+  return {
+    ...(privateState ? privateState() : {}),
+    ...(extendedState ? extendedState() : {}),
+  }
+}
+
+type AnyStoreDef = StoreDefinition<any, any, any, any, any, any>
+
+const merge = <A extends {}, B extends {}>(a?: A, b?: B) => {
+  const result = {} as any
+
+  Object.entries(Object.getOwnPropertyDescriptors(a || {}))
+    .concat(Object.entries(Object.getOwnPropertyDescriptors(b || {})))
+    .forEach(([key, value]) => {
+      Object.defineProperty(result, key, value)
+    })
+
+  return result as A & B
+}
+
+const getWithExtended = (options: AnyStoreDef, key: keyof AnyStoreDef) => {
+  const item = options[key]
+  const extended = options.extends?.[key]
+  return merge(item, extended)
+}
+
+const getGetters = (options: AnyStoreDef) => getWithExtended(options, 'getters')
+
+const getActions = (options: AnyStoreDef) => getWithExtended(options, 'actions')
+
+const getComputed = (options: AnyStoreDef) =>
+  getWithExtended(options, 'computed')
 
 export const defineStore = <
   S extends Record<string | number | symbol, any>,
   P extends Record<string | number | symbol, any>,
   G,
   A,
-  C
->({
-  id,
-  state,
-  privateState,
-  getters,
-  actions,
-  ...options
-}: {
-  id: string
-  state?: () => S
-  privateState?: () => P
-  getters?: G & ThisType<Readonly<S & P & StoreWithGetters<G>>>
-  actions?: A & ThisType<S & P & Readonly<A & StoreWithGetters<G>>>
-  computed?: C & ThisType<C & S & P & Readonly<A & StoreWithGetters<G>>>
-}): (() => StoreWithState<S> &
-  Readonly<StoreWithGetters<G> & StoreWithActions<A>> &
-  StoreWithComputed<C>) => {
+  C,
+  E
+>(
+  options: StoreDefinition<S, P, G, A, C, E>
+): UsePinexStore<S, P, G, A, C, E> => {
+  const { id } = options
+  const getters = getGetters(options)
+  const actions = getActions(options)
+  const computedDef = getComputed(options)
   let store: Store<any>
   const setup = () => {
-    const defaultState = state ? state() : {}
-    const defaultPrivateState = privateState ? privateState() : {}
+    const defaultState = getState(options)
+    const defaultPrivateState = getPrivateState(options)
 
     const pxStore: any = {
       $subscribe: (cb: SubscribeCallback<any>) => {
@@ -51,7 +103,7 @@ export const defineStore = <
 
     const actionTree: ActionTree<S, any> = {}
 
-    for (const key in actions || {}) {
+    for (const key in actions) {
       actionTree[key] = ({ state, commit }, payload) => {
         const a = (actions as any)[key] as Function
 
@@ -77,7 +129,7 @@ export const defineStore = <
 
     const getterTree: GetterTree<S, any> = {}
 
-    for (const key in getters || {}) {
+    for (const key in getters) {
       getterTree[key] = (s: any, g: any) => {
         const proxy = {} as any
         for (const sk in defaultState) {
@@ -86,10 +138,10 @@ export const defineStore = <
         for (const sk in defaultPrivateState) {
           proxy[sk] = computed(() => s[sk])
         }
-        for (const gk in getters || {}) {
+        for (const gk in getters) {
           proxy[gk] = computed(() => g[gk])
         }
-        for (const gk in options.computed || {}) {
+        for (const gk in computedDef) {
           proxy[gk] = computed(() => g[gk])
         }
         const getterMethod = (getters as any)[key] as Function
@@ -98,9 +150,9 @@ export const defineStore = <
       pxStore[key] = computed(() => store.getters[id + '/' + key])
     }
 
-    for (const key in options.computed || {}) {
+    for (const key in computedDef) {
       let computedMethod: Function
-      const property = Object.getOwnPropertyDescriptor(options.computed, key)!
+      const property = Object.getOwnPropertyDescriptor(computedDef, key)!
       if (property.set) {
         if (!property.get) {
           throw new Error(
@@ -173,13 +225,10 @@ export const defineStore = <
 
     const vuexStore = {
       namespaced: true,
-      state:
-        state || privateState
-          ? () => ({
-              ...(state ? state() : {}),
-              ...(privateState ? privateState() : {}),
-            })
-          : undefined,
+      state: () => ({
+        ...defaultState,
+        ...defaultPrivateState,
+      }),
       getters: getterTree,
       mutations,
       actions: actionTree,
@@ -199,7 +248,7 @@ export const defineStore = <
 
   const modulePath = id.split('/')
 
-  return () => {
+  const useStore = (() => {
     if (!pinexStore) {
       const [pStore, config] = setup()
 
@@ -222,7 +271,9 @@ export const defineStore = <
       gettersPrimed = true
     }
     return pinexStore
-  }
+  }) as UsePinexStore<S, P, G, A, C, E>
+  useStore.$definition = options
+  return useStore
 }
 
 const Plugin: PluginObject<{ store: Store<any> }> = {

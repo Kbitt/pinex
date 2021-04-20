@@ -35,6 +35,7 @@ export const useStore = defineStore({
   privateState: () => ({
     countValue: 0,
   }),
+  // computed properties. They can be like getters or can be configured with setter
   computed: {
     // get-only computed works the same as getters
     next() {
@@ -50,5 +51,7 @@ export const useStore = defineStore({
       this.countValue = value
     },
   },
+  // extend a store. All properties from the other store are copied into the store, and available appropriate in the store instance and getters/actions etc. This is NOT a reference to the other store, all properties are present in the current store that is doing the extending
+  extends: useSomeOtherStore.$definition,
 })
 ```

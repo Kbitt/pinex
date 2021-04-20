@@ -992,5 +992,118 @@ describe('index', () => {
         )
       })
     })
+
+    describe('extend', () => {
+      it('works', () => {
+        const useBaseStore = defineStore({
+          id: 'base',
+          state: () => ({
+            value: 123,
+          }),
+        })
+
+        const useSuperStore = defineStore({
+          id: 'super',
+          computed: {
+            get neg(): number {
+              return -this.value
+            },
+            set neg(value) {
+              this.value = -value
+            },
+          },
+
+          extends: useBaseStore.$definition,
+        })
+
+        const store = useSuperStore()
+
+        expect(store.value).toBe(123)
+        expect(store.neg).toBe(-123)
+
+        store.neg = 444
+
+        expect(store.value).toBe(-444)
+      })
+
+      it('works copies private state', () => {
+        const useBaseStore = defineStore({
+          id: 'base',
+          privateState: () => ({
+            value: 444,
+          }),
+        })
+
+        const useSuperStore = defineStore({
+          id: 'super',
+          computed: {
+            get neg(): number {
+              return -this.value
+            },
+            set neg(value) {
+              this.value = -value
+            },
+          },
+
+          extends: useBaseStore.$definition,
+        })
+
+        const store = useSuperStore()
+
+        expect(store.neg).toBe(-444)
+
+        store.neg = 444
+
+        expect(vuexStore.state.super.value).toBe(-444)
+      })
+
+      it('can call base getter', () => {
+        const useStore = defineStore({
+          id: 'base',
+          state: () => ({ value: 'foo' }),
+          getters: {
+            foo(): string {
+              return this.value
+            },
+          },
+        })
+
+        const useSuperStore = defineStore({
+          id: 'super',
+          extends: useStore.$definition,
+        })
+
+        const store = useSuperStore()
+
+        expect(store.foo).toBe('foo')
+      })
+
+      it('can call base action', () => {
+        const mock = jest.fn()
+        const useStore = defineStore({
+          id: 'base',
+          state: () => ({ value: 'foo' }),
+          actions: {
+            foo: mock,
+          },
+        })
+
+        const useSuperStore = defineStore({
+          id: 'super',
+          actions: {
+            bar() {
+              this.foo()
+            },
+          },
+          extends: useStore.$definition,
+        })
+
+        const store = useSuperStore()
+
+        store.bar()
+
+        expect(mock).toHaveBeenCalled()
+      })
+    })
   })
 })
