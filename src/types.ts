@@ -6,24 +6,32 @@ export type SubscribeCallback<S> = (
   newPartialState: Partial<S>
 ) => void
 
-export type StoreWithState<S, E> = S & {
-  $subscribe(cb: SubscribeCallback<S>): void
-} & (E extends StoreDefinition<infer ES, any, any, any, any, any> ? ES : {})
+export type Norm<T> = T extends {} ? T : unknown
 
-export type StoreWithGetters<G, E> = {
-  [k in keyof G]: G[k] extends (this: infer This, store?: any) => infer R
-    ? R
-    : {}
-} &
+export type StoreWithState<S, E> = Norm<S> & {
+  $subscribe(cb: SubscribeCallback<S>): void
+} & (E extends StoreDefinition<infer ES, any, any, any, any, any>
+    ? Norm<ES>
+    : unknown)
+
+export type StoreWithGetters<G, E> = (G extends {}
+  ? {
+      [k in keyof G]: G[k] extends (this: infer This, store?: any) => infer R
+        ? R
+        : {}
+    }
+  : {}) &
   (E extends StoreDefinition<any, any, infer EG, any, any, any>
     ? StoreWithGetters<EG, void>
     : {})
 
-export type StoreWithActions<A, E> = {
-  [k in keyof A]: A[k] extends (...args: infer P) => infer R
-    ? (...args: P) => R
-    : {}
-} &
+export type StoreWithActions<A, E> = (A extends {}
+  ? {
+      [k in keyof A]: A[k] extends (...args: infer P) => infer R
+        ? (...args: P) => R
+        : {}
+    }
+  : {}) &
   (E extends StoreDefinition<any, any, any, infer EA, any, any>
     ? StoreWithActions<EA, void>
     : {})
@@ -57,14 +65,7 @@ export type ExtendedActions<E> = E extends StoreDefinition<
   ? A
   : {}
 
-export type StoreDefinition<
-  S extends Record<string | number | symbol, any>,
-  P extends Record<string | number | symbol, any>,
-  G,
-  A,
-  C,
-  E
-> = {
+export type StoreDefinition<S extends {}, P extends {}, G, A, C, E> = {
   id: string
   state?: () => S
   privateState?: () => P
@@ -86,6 +87,7 @@ export type StoreDefinition<
     ThisType<
       S &
         P &
+        ExtendedState<E> &
         Readonly<
           A &
             ExtendedActions<E> &
@@ -96,24 +98,11 @@ export type StoreDefinition<
   extends?: E
 }
 
-export type PinexStore<
-  S extends Record<string | number | symbol, any>,
-  G,
-  A,
-  C,
-  E
-> = StoreWithState<S, E> &
+export type PinexStore<S, G, A, C, E> = StoreWithState<S, E> &
   Readonly<StoreWithGetters<G, E> & StoreWithActions<A, E>> &
   StoreWithComputed<C, E>
 
-export type UsePinexStore<
-  S extends Record<string | number | symbol, any>,
-  P extends Record<string | number | symbol, any>,
-  G,
-  A,
-  C,
-  E
-> = {
+export type UsePinexStore<S, P, G, A, C, E> = {
   (): PinexStore<S, G, A, C, E>
   $definition: StoreDefinition<S, P, G, A, C, E>
 }

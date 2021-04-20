@@ -74,14 +74,7 @@ const getActions = (options: AnyStoreDef) => getWithExtended(options, 'actions')
 const getComputed = (options: AnyStoreDef) =>
   getWithExtended(options, 'computed')
 
-export const defineStore = <
-  S extends Record<string | number | symbol, any>,
-  P extends Record<string | number | symbol, any>,
-  G,
-  A,
-  C,
-  E
->(
+export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
   options: StoreDefinition<S, P, G, A, C, E>
 ): UsePinexStore<S, P, G, A, C, E> => {
   const { id } = options
@@ -110,7 +103,7 @@ export const defineStore = <
         const psProxy = {} as any
         for (const k in defaultPrivateState) {
           psProxy[k] = computed({
-            get: () => state[k],
+            get: () => state[k as keyof S],
             set: value => commit(getSetterMutation(), { key: k, value }),
           })
         }
@@ -164,7 +157,7 @@ export const defineStore = <
           const psProxy = {} as any
           for (const k in defaultPrivateState) {
             psProxy[k] = computed({
-              get: () => state[k],
+              get: () => state[k as keyof S],
               set: value => commit(getSetterMutation(), { key: k, value }),
             })
           }

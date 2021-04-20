@@ -1004,6 +1004,7 @@ describe('index', () => {
 
         const useSuperStore = defineStore({
           id: 'super',
+          extends: useBaseStore.$definition,
           computed: {
             get neg(): number {
               return -this.value
@@ -1012,9 +1013,9 @@ describe('index', () => {
               this.value = -value
             },
           },
-
-          extends: useBaseStore.$definition,
         })
+
+        const b = useBaseStore()
 
         const store = useSuperStore()
 
