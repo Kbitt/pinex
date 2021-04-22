@@ -10,7 +10,7 @@ export type Norm<T> = T extends {} ? T : unknown
 
 export type StoreWithState<S, E> = Norm<S> & {
   $subscribe(cb: SubscribeCallback<S>): void
-} & (E extends StoreDefinition<infer ES, any, any, any, any, any>
+} & (E extends UsePinexStore<infer ES, any, any, any, any, any>
     ? Norm<ES>
     : unknown)
 
@@ -21,7 +21,7 @@ export type StoreWithGetters<G, E> = (G extends {}
         : {}
     }
   : {}) &
-  (E extends StoreDefinition<any, any, infer EG, any, any, any>
+  (E extends UsePinexStore<any, any, infer EG, any, any, any>
     ? StoreWithGetters<EG, void>
     : {})
 
@@ -32,18 +32,18 @@ export type StoreWithActions<A, E> = (A extends {}
         : {}
     }
   : {}) &
-  (E extends StoreDefinition<any, any, any, infer EA, any, any>
+  (E extends UsePinexStore<any, any, any, infer EA, any, any>
     ? StoreWithActions<EA, void>
     : {})
 
 export type StoreWithComputed<C, E> = {
   [K in keyof C]: C[K] extends () => infer R ? R : C[K]
 } &
-  (E extends StoreDefinition<any, any, any, any, infer CE, any>
+  (E extends UsePinexStore<any, any, any, any, infer CE, any>
     ? StoreWithComputed<CE, void>
     : {})
 
-export type ExtendedState<E> = E extends StoreDefinition<
+export type ExtendedState<E> = E extends UsePinexStore<
   infer S,
   infer P,
   any,
@@ -54,7 +54,7 @@ export type ExtendedState<E> = E extends StoreDefinition<
   ? S & P
   : {}
 
-export type ExtendedActions<E> = E extends StoreDefinition<
+export type ExtendedActions<E> = E extends UsePinexStore<
   any,
   any,
   any,
@@ -64,6 +64,71 @@ export type ExtendedActions<E> = E extends StoreDefinition<
 >
   ? A
   : {}
+
+export type ExtendedStoreDefinitionState<S, E> = E extends UsePinexStore<
+  infer SE,
+  any,
+  any,
+  any,
+  any,
+  any
+>
+  ? S & SE
+  : S
+
+export type ExtendedStoreDefinitionPrivateState<
+  P,
+  E
+> = E extends StoreDefinition<any, infer PE, any, any, any, any> ? P & PE : P
+
+export type ExtendedDefinitionGetters<G, E> = E extends UsePinexStore<
+  any,
+  any,
+  infer GE,
+  any,
+  any,
+  any
+>
+  ? G & GE
+  : G
+
+export type ExtendedDefintionActions<A, E> = E extends UsePinexStore<
+  any,
+  any,
+  any,
+  infer AE,
+  any,
+  any
+>
+  ? A & AE
+  : A
+
+export type ExtendedDefinitionComputed<C, E> = E extends UsePinexStore<
+  any,
+  any,
+  any,
+  any,
+  infer CE,
+  any
+>
+  ? C & CE
+  : C
+
+export type ExtendedStoreDefinition<
+  S extends {},
+  P extends {},
+  G,
+  A,
+  C,
+  E
+> = StoreDefinition<
+  ExtendedStoreDefinitionState<S, E>,
+  ExtendedStoreDefinitionPrivateState<P, E>,
+  ExtendedDefinitionGetters<G, E>,
+  ExtendedDefintionActions<A, E>,
+  ExtendedDefinitionComputed<C, E>,
+  void
+>
 
 export type StoreDefinition<S extends {}, P extends {}, G, A, C, E> = {
   id: string
@@ -104,5 +169,15 @@ export type PinexStore<S, G, A, C, E> = StoreWithState<S, E> &
 
 export type UsePinexStore<S, P, G, A, C, E> = {
   (): PinexStore<S, G, A, C, E>
-  $definition: StoreDefinition<S, P, G, A, C, E>
+}
+
+export type InternalUsePinexStore<S, P, G, A, C, E> = UsePinexStore<
+  S,
+  P,
+  G,
+  A,
+  C,
+  E
+> & {
+  $definition: ExtendedStoreDefinition<S, P, G, A, C, E>
 }

@@ -5,7 +5,13 @@ import { set } from './getset'
 import { getSetterAction, getSetterMutation } from './mutations'
 import { defineState } from './state'
 import { getStore, setStore } from './store'
-import { StoreDefinition, SubscribeCallback, UsePinexStore } from './types'
+import {
+  ExtendedStoreDefinition,
+  InternalUsePinexStore,
+  StoreDefinition,
+  SubscribeCallback,
+  UsePinexStore,
+} from './types'
 
 export const isUseStore = (
   def?: any
@@ -48,8 +54,30 @@ const getPrivateState = <P, E>(
 }
 
 type AnyStoreDef = StoreDefinition<any, any, any, any, any, any>
+type AnyUseStore = InternalUsePinexStore<any, any, any, any, any, any>
+
+const mergeFn = <A, B>(getA?: () => A, getB?: () => B) => {
+  if (!getA && !getB) {
+    return undefined
+  }
+
+  if (!getA || !getB) {
+    const fn = (getA ?? getB)!
+
+    return () => fn()
+  }
+
+  return () => ({
+    ...getA(),
+    ...getB(),
+  })
+}
 
 const merge = <A extends {}, B extends {}>(a?: A, b?: B) => {
+  if (!a && !b) {
+    return undefined
+  }
+
   const result = {} as any
 
   Object.entries(Object.getOwnPropertyDescriptors(a || {}))
@@ -61,31 +89,42 @@ const merge = <A extends {}, B extends {}>(a?: A, b?: B) => {
   return result as A & B
 }
 
-const getWithExtended = (options: AnyStoreDef, key: keyof AnyStoreDef) => {
-  const item = options[key]
-  const extended = options.extends?.[key]
-  return merge(item, extended)
+const mergeExtended = <S extends {}, P extends {}, G, A, C, E>(
+  options: StoreDefinition<S, P, G, A, C, E>
+): ExtendedStoreDefinition<S, P, G, A, C, E> => {
+  if (!options.extends) {
+    return options as ExtendedStoreDefinition<S, P, G, A, C, E>
+  }
+
+  const extended = ((options.extends as any) as AnyUseStore).$definition
+
+  const result = {} as Partial<ExtendedStoreDefinition<S, P, G, A, C, E>>
+
+  result.state = mergeFn(options.state, extended.state)
+
+  result.privateState = mergeFn(options.privateState, extended.privateState)
+
+  result.getters = merge(options.getters, extended.getters)
+
+  result.actions = merge(options.actions, extended.actions)
+
+  result.computed = merge(options.computed, extended.computed)
+
+  return result as ExtendedStoreDefinition<S, P, G, A, C, E>
 }
-
-const getGetters = (options: AnyStoreDef) => getWithExtended(options, 'getters')
-
-const getActions = (options: AnyStoreDef) => getWithExtended(options, 'actions')
-
-const getComputed = (options: AnyStoreDef) =>
-  getWithExtended(options, 'computed')
 
 export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
   options: StoreDefinition<S, P, G, A, C, E>
 ): UsePinexStore<S, P, G, A, C, E> => {
   const { id } = options
-  const getters = getGetters(options)
-  const actions = getActions(options)
-  const computedDef = getComputed(options)
+  const mergedOptions = mergeExtended(options)
+  const { getters, actions, computed: computedDef } = mergedOptions
+  const defaultState = mergedOptions.state ? mergedOptions.state() : {}
+  const defaultPrivateState = mergedOptions.privateState
+    ? mergedOptions.privateState()
+    : {}
   let store: Store<any>
   const setup = () => {
-    const defaultState = getState(options)
-    const defaultPrivateState = getPrivateState(options)
-
     const pxStore: any = {
       $subscribe: (cb: SubscribeCallback<any>) => {
         subscribeCallbacks.push(cb)
@@ -103,7 +142,7 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
         const psProxy = {} as any
         for (const k in defaultPrivateState) {
           psProxy[k] = computed({
-            get: () => state[k as keyof S],
+            get: () => (state as any)[k],
             set: value => commit(getSetterMutation(), { key: k, value }),
           })
         }
@@ -146,29 +185,24 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
     for (const key in computedDef) {
       let computedMethod: Function
       const property = Object.getOwnPropertyDescriptor(computedDef, key)!
-      if (property.set) {
-        if (!property.get) {
-          throw new Error(
-            'Expected get and set to be defined on computed property'
-          )
-        }
-
-        actionTree[getSetterAction(key)] = ({ state, commit }, payload) => {
-          const psProxy = {} as any
-          for (const k in defaultPrivateState) {
-            psProxy[k] = computed({
-              get: () => state[k as keyof S],
-              set: value => commit(getSetterMutation(), { key: k, value }),
-            })
-          }
-          const proxy = reactive({
-            ...toRefs(pxStore),
-            ...psProxy,
-          })
-          return property.set!.call(proxy, payload)
-        }
-
+      if (property.get) {
         computedMethod = property.get
+        if (property.set) {
+          actionTree[getSetterAction(key)] = ({ state, commit }, payload) => {
+            const psProxy = {} as any
+            for (const k in defaultPrivateState) {
+              psProxy[k] = computed({
+                get: () => (state as any)[k],
+                set: value => commit(getSetterMutation(), { key: k, value }),
+              })
+            }
+            const proxy = reactive({
+              ...toRefs(pxStore),
+              ...psProxy,
+            })
+            return property.set!.call(proxy, payload)
+          }
+        }
       } else if (property.value && typeof property.value === 'function') {
         computedMethod = property.value
       } else {
@@ -191,7 +225,7 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
         for (const gk in getters || {}) {
           proxy[gk] = computed(() => g[gk])
         }
-        for (const ck in options.computed || {}) {
+        for (const ck in mergedOptions.computed || {}) {
           proxy[ck] = computed(() => g[ck])
         }
         return computedMethod.call(reactive(proxy))
@@ -264,9 +298,9 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
       gettersPrimed = true
     }
     return pinexStore
-  }) as UsePinexStore<S, P, G, A, C, E>
-  useStore.$definition = options
-  return useStore
+  }) as InternalUsePinexStore<S, P, G, A, C, E>
+  useStore.$definition = mergedOptions
+  return useStore as UsePinexStore<S, P, G, A, C, E>
 }
 
 const Plugin: PluginObject<{ store: Store<any> }> = {

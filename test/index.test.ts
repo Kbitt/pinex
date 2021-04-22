@@ -1004,7 +1004,7 @@ describe('index', () => {
 
         const useSuperStore = defineStore({
           id: 'super',
-          extends: useBaseStore.$definition,
+          extends: useBaseStore,
           computed: {
             get neg(): number {
               return -this.value
@@ -1037,6 +1037,7 @@ describe('index', () => {
 
         const useSuperStore = defineStore({
           id: 'super',
+          extends: useBaseStore,
           computed: {
             get neg(): number {
               return -this.value
@@ -1045,8 +1046,6 @@ describe('index', () => {
               this.value = -value
             },
           },
-
-          extends: useBaseStore.$definition,
         })
 
         const store = useSuperStore()
@@ -1071,7 +1070,7 @@ describe('index', () => {
 
         const useSuperStore = defineStore({
           id: 'super',
-          extends: useStore.$definition,
+          extends: useStore,
         })
 
         const store = useSuperStore()
@@ -1081,9 +1080,19 @@ describe('index', () => {
 
       it('can call base action', () => {
         const mock = jest.fn()
+        const useBasic = defineStore({
+          id: 'base',
+          state: () => ({ basicValue: 0 }),
+          privateState: () => ({ amprivate: true }),
+          actions: {
+            basicFoo() {},
+          },
+        })
         const useStore = defineStore({
           id: 'base',
+          extends: useBasic,
           state: () => ({ value: 'foo' }),
+          privateState: () => ({ privateValue: 'bar' }),
           actions: {
             foo: mock,
           },
@@ -1091,12 +1100,17 @@ describe('index', () => {
 
         const useSuperStore = defineStore({
           id: 'super',
+          extends: useStore,
           actions: {
             bar() {
               this.foo()
             },
           },
-          extends: useStore.$definition,
+          computed: {
+            get biz(): number {
+              return 0
+            },
+          },
         })
 
         const store = useSuperStore()
