@@ -1,3 +1,67 @@
+type IfEquals<X, Y, A = X, B = never> = (<T>() => T extends X ? 1 : 2) extends <
+  T
+>() => T extends Y ? 1 : 2
+  ? A
+  : B
+
+/**
+ * Get all keys for the given type that are writable.
+ */
+type WritableKeys<T> = {
+  [P in keyof T]-?: IfEquals<
+    { [Q in P]: T[P] },
+    { -readonly [Q in P]: T[P] },
+    P
+  >
+}[keyof T]
+
+type FilterWritableOnly<T> = {
+  [P in WritableKeys<T>]: T[P]
+}
+
+type FilterWritableNonFunction<T> = {
+  [P in keyof Omit<
+    FilterWritableOnly<T>,
+    FunctionKeys<FilterWritableOnly<T>>
+  >]: T[P]
+}
+
+/**
+ * Get all keys for the given type that are readonly.
+ */
+type ReadonlyKeys<T> = {
+  [P in keyof T]-?: IfEquals<
+    { [Q in P]: T[P] },
+    { -readonly [Q in P]: T[P] },
+    never,
+    P
+  >
+}[keyof T]
+
+type FilterReadOnly<T> = {
+  [P in ReadonlyKeys<T>]: T[P]
+}
+
+type IsReadonly<T, U extends keyof T> = U extends ReadonlyKeys<T> ? U : never
+
+/**
+ * Get all keys for the given type that are functions (not fields).
+ */
+type FunctionKeys<T> = {
+  [P in keyof T]: T[P] extends () => any ? P : never
+}[keyof T]
+
+type FilterFunctionOnly<T> = {
+  [P in FunctionKeys<T>]: T[P]
+}
+
+/**
+ * Get all keys for the given type that are fields (not functions).
+ */
+type FieldKeys<T> = {
+  [P in keyof T]: T[P] extends () => any ? never : P
+}[keyof T]
+
 export type DeepOptional<T extends {}> = {
   [K in keyof T]?: T[K] extends {} ? DeepOptional<T[K]> : T[K]
 }
@@ -189,37 +253,37 @@ export type StoreDefinition<S extends {}, P extends {}, G, A, C, E> = {
   state?: () => S
   privateState?: () => P
   getters?: G &
-    ThisType<Readonly<S & P & ExtendedState<E> & StoreWithGetters<G, E>>>
+    ThisType<
+      Readonly<
+        S &
+          P &
+          ExtendedState<E> &
+          StoreWithComputed<C, E> &
+          StoreWithGetters<G, E>
+      >
+    >
   actions?: A &
     ThisType<
       S &
         P &
         ExtendedState<E> &
-        Readonly<
-          A &
-            ExtendedActions<E> &
-            StoreWithGetters<G, E> &
-            StoreWithComputed<C, E>
-        >
+        StoreWithComputed<C, E> &
+        Readonly<A & ExtendedActions<E> & StoreWithGetters<G, E>>
     >
   computed?: C &
     ThisType<
       S &
         P &
         ExtendedState<E> &
-        Readonly<
-          A &
-            ExtendedActions<E> &
-            StoreWithGetters<G, E> &
-            StoreWithComputed<C, E>
-        >
+        StoreWithComputed<C, E> &
+        Readonly<A & ExtendedActions<E> & StoreWithGetters<G, E>>
     >
   extends?: E
 }
 
 export type PinexStore<S, G, A, C, E> = StoreWithState<S, E> &
-  Readonly<StoreWithGetters<G, E> & StoreWithActions<A, E>> &
-  StoreWithComputed<C, E>
+  StoreWithComputed<C, E> &
+  Readonly<StoreWithGetters<G, E> & StoreWithActions<A, E>>
 
 export type UsePinexStore<S, P, G, A, C, E> = {
   (): PinexStore<S, G, A, C, E>

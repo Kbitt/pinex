@@ -248,6 +248,14 @@ describe('index', () => {
             set value(value) {
               this.myValue = value
             },
+            get getOnly(): string {
+              return 'getonly'
+            },
+          },
+          actions: {
+            foo() {
+              this.value = 123
+            },
           },
         })
 
