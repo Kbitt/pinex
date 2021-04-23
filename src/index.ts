@@ -7,7 +7,6 @@ import { defineState } from './state'
 import { getStore, setStore } from './store'
 import {
   ExtendedStoreDefinition,
-  InternalUsePinexStore,
   StoreDefinition,
   SubscribeCallback,
   UsePinexStore,
@@ -54,7 +53,7 @@ const getPrivateState = <P, E>(
 }
 
 type AnyStoreDef = StoreDefinition<any, any, any, any, any, any>
-type AnyUseStore = InternalUsePinexStore<any, any, any, any, any, any>
+type AnyUseStore = UsePinexStore<any, any, any, any, any, any>
 
 const mergeFn = <A, B>(getA?: () => A, getB?: () => B) => {
   if (!getA && !getB) {
@@ -298,7 +297,7 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
       gettersPrimed = true
     }
     return pinexStore
-  }) as InternalUsePinexStore<S, P, G, A, C, E>
+  }) as UsePinexStore<S, P, G, A, C, E>
   useStore.$definition = mergedOptions
   return useStore as UsePinexStore<S, P, G, A, C, E>
 }

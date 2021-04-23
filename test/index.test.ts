@@ -1079,15 +1079,38 @@ describe('index', () => {
       })
 
       it('can call base action', () => {
+        const basicMock = jest.fn()
         const mock = jest.fn()
         const useBasic = defineStore({
           id: 'base',
           state: () => ({ basicValue: 0 }),
-          privateState: () => ({ amprivate: true }),
+          privateState: () => ({ amprivate: true, getSet: 'defaultGetSet' }),
           actions: {
-            basicFoo() {},
+            basicFoo() {
+              basicMock()
+            },
+          },
+          getters: {
+            gBasic() {
+              return 'g'
+            },
+          },
+          computed: {
+            cBasic() {
+              return 'c'
+            },
+            get getComputed(): string {
+              return 'get'
+            },
+            get getSetComputed(): string {
+              return this.getSet
+            },
+            set getSetComputed(value) {
+              this.getSet = value
+            },
           },
         })
+
         const useStore = defineStore({
           id: 'base',
           extends: useBasic,
@@ -1095,6 +1118,9 @@ describe('index', () => {
           privateState: () => ({ privateValue: 'bar' }),
           actions: {
             foo: mock,
+            fuy() {
+              this.basicFoo()
+            },
           },
         })
 
@@ -1118,6 +1144,16 @@ describe('index', () => {
         store.bar()
 
         expect(mock).toHaveBeenCalled()
+
+        expect(store.cBasic).toBe('c')
+
+        expect(store.getComputed).toBe('get')
+
+        expect(store.getSetComputed).toBe('defaultGetSet')
+
+        store.basicFoo()
+
+        expect(basicMock).toHaveBeenCalled()
       })
     })
   })
