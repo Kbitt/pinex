@@ -1163,6 +1163,38 @@ describe('index', () => {
 
         expect(basicMock).toHaveBeenCalled()
       })
+
+      it('can override actions', () => {
+        const baseMockFoo = jest.fn()
+        const useBase = defineStore({
+          id: 'base',
+          actions: {
+            foo() {
+              baseMockFoo()
+            },
+          },
+        })
+
+        const mockFoo = jest.fn()
+
+        const useStore = defineStore({
+          id: 'store',
+          extends: useBase,
+          actions: {
+            foo() {
+              mockFoo()
+            },
+          },
+        })
+
+        const store = useStore()
+
+        store.foo()
+
+        expect(mockFoo).toHaveBeenCalled()
+
+        expect(baseMockFoo).not.toHaveBeenCalled()
+      })
     })
   })
 })

@@ -82,7 +82,7 @@ const merge = <A extends {}, B extends {}>(a?: A, b?: B) => {
   Object.entries(Object.getOwnPropertyDescriptors(a || {}))
     .concat(Object.entries(Object.getOwnPropertyDescriptors(b || {})))
     .forEach(([key, value]) => {
-      Object.defineProperty(result, key, value)
+      Object.defineProperty(result, key, { ...value, configurable: true })
     })
 
   return result as A & B
@@ -99,15 +99,15 @@ const mergeExtended = <S extends {}, P extends {}, G, A, C, E>(
 
   const result = {} as Partial<ExtendedStoreDefinition<S, P, G, A, C, E>>
 
-  result.state = mergeFn(options.state, extended.state)
+  result.state = mergeFn(extended.state, options.state)
 
-  result.privateState = mergeFn(options.privateState, extended.privateState)
+  result.privateState = mergeFn(extended.privateState, options.privateState)
 
-  result.getters = merge(options.getters, extended.getters)
+  result.getters = merge(extended.getters, options.getters)
 
-  result.actions = merge(options.actions, extended.actions)
+  result.actions = merge(extended.actions, options.actions)
 
-  result.computed = merge(options.computed, extended.computed)
+  result.computed = merge(extended.computed, options.computed)
 
   return result as ExtendedStoreDefinition<S, P, G, A, C, E>
 }
