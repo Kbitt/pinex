@@ -1195,6 +1195,140 @@ describe('index', () => {
 
         expect(baseMockFoo).not.toHaveBeenCalled()
       })
+
+      it('overrided action called by base action ', () => {
+        const baseMockFoo = jest.fn()
+        const useBase = defineStore({
+          id: 'base',
+          actions: {
+            foo() {
+              baseMockFoo()
+            },
+            bar() {
+              this.foo()
+            },
+          },
+        })
+
+        const mockFoo = jest.fn()
+
+        const useStore = defineStore({
+          id: 'store',
+          extends: useBase,
+          actions: {
+            foo() {
+              mockFoo()
+            },
+          },
+        })
+
+        const store = useStore()
+
+        store.bar()
+
+        expect(mockFoo).toHaveBeenCalled()
+
+        expect(baseMockFoo).not.toHaveBeenCalled()
+      })
+
+      it('can override getters', () => {
+        const useBase = defineStore({
+          id: 'base',
+          getters: {
+            foo(): string {
+              return 'foo'
+            },
+          },
+        })
+
+        const useStore = defineStore({
+          id: 'store',
+          extends: useBase,
+          getters: {
+            foo(): string {
+              return 'nextFoo'
+            },
+          },
+        })
+
+        const store = useStore()
+
+        const value = store.foo
+
+        expect(value).toBe('nextFoo')
+      })
+
+      it('base getter calls override', () => {
+        const useBase = defineStore({
+          id: 'base',
+          getters: {
+            foo(): string {
+              return 'foo'
+            },
+            upper() {
+              return this.foo.toUpperCase()
+            },
+          },
+        })
+
+        const useStore = defineStore({
+          id: 'store',
+          extends: useBase,
+          getters: {
+            foo(): string {
+              return 'nextFoo'
+            },
+          },
+        })
+
+        const store = useStore()
+
+        const value = store.upper
+
+        expect(value).toBe('NEXTFOO')
+      })
+
+      it('can override computed', () => {
+        const useBase = defineStore({
+          id: 'base',
+          state: () => ({ value: 123 }),
+          computed: {
+            foo(): string {
+              return 'foo'
+            },
+            get n(): number {
+              return this.value
+            },
+            set n(value) {
+              this.value = value
+            },
+          },
+        })
+
+        const useStore = defineStore({
+          id: 'store',
+          extends: useBase,
+          state: () => ({ otherValue: 123 }),
+          computed: {
+            get n(): number {
+              return this.otherValue
+            },
+            set n(value) {
+              this.otherValue = value
+            },
+          },
+        })
+
+        const store = useStore()
+
+        const value = 444
+
+        store.n = value
+
+        expect(store.otherValue).toBe(444)
+
+        expect(store.value).toBe(123)
+      })
     })
   })
 })
