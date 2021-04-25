@@ -6,12 +6,17 @@ import { defineState } from './state'
 import { getStore } from './store'
 import {
   ExtendedStoreDefinition,
+  MergeActions,
+  MergeComputed,
+  MergeGetters,
+  MergePrivateState,
+  MergeState,
   StoreDefinition,
   SubscribeCallback,
   UsePinexStore,
 } from './types'
 
-type AnyUseStore = UsePinexStore<any, any, any, any, any, any>
+type AnyUseStore = UsePinexStore<any, any, any, any, any>
 
 const mergeFn = <A, B>(getA?: () => A, getB?: () => B) => {
   if (!getA && !getB) {
@@ -57,9 +62,15 @@ const mergeExtended = <S extends {}, P extends {}, G, A, C, E>(
 
   const result = {} as Partial<ExtendedStoreDefinition<S, P, G, A, C, E>>
 
-  result.state = mergeFn(extended.state, options.state)
+  result.state = mergeFn(extended.state, options.state) as () => MergeState<
+    S,
+    E
+  >
 
-  result.privateState = mergeFn(extended.privateState, options.privateState)
+  result.privateState = mergeFn(
+    extended.privateState,
+    options.privateState
+  ) as () => MergePrivateState<P, E>
 
   result.getters = merge(extended.getters, options.getters)
 
@@ -72,7 +83,7 @@ const mergeExtended = <S extends {}, P extends {}, G, A, C, E>(
 
 export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
   options: StoreDefinition<S, P, G, A, C, E>
-): UsePinexStore<S, P, G, A, C, E> => {
+) => {
   const { id } = options
   const mergedOptions = mergeExtended(options)
   const { getters, actions, computed: computedDef } = mergedOptions
@@ -255,7 +266,13 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
       gettersPrimed = true
     }
     return pinexStore
-  }) as UsePinexStore<S, P, G, A, C, E>
+  }) as UsePinexStore<
+    MergeState<S, E>,
+    MergePrivateState<P, E>,
+    MergeGetters<G, E>,
+    MergeActions<A, E>,
+    MergeComputed<C, E>
+  >
   useStore.$definition = mergedOptions
-  return useStore as UsePinexStore<S, P, G, A, C, E>
+  return useStore
 }

@@ -1023,8 +1023,6 @@ describe('index', () => {
           },
         })
 
-        const b = useBaseStore()
-
         const store = useSuperStore()
 
         expect(store.value).toBe(123)
@@ -1056,7 +1054,12 @@ describe('index', () => {
           },
         })
 
+        let baseStore = useBaseStore()
+
         const store = useSuperStore()
+
+        // super is assignable to base type
+        baseStore = store
 
         expect(store.neg).toBe(-444)
 
