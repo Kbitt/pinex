@@ -104,19 +104,10 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
     const actionTree: ActionTree<S, any> = {}
 
     for (const key in actions) {
-      actionTree[key] = ({ state, commit }, payload) => {
+      actionTree[key] = (_, payload) => {
         const a = (actions as any)[key] as Function
-
-        const psProxy = {} as any
-        for (const k in defaultPrivateState) {
-          psProxy[k] = computed({
-            get: () => (state as any)[k],
-            set: value => commit(getSetterMutation(), { key: k, value }),
-          })
-        }
         const proxy = reactive({
           ...toRefs(pxStore),
-          ...psProxy,
         })
 
         return a.apply(proxy, payload)
@@ -157,16 +148,8 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
         computedMethod = property.get
         if (property.set) {
           actionTree[getSetterAction(key)] = ({ state, commit }, payload) => {
-            const psProxy = {} as any
-            for (const k in defaultPrivateState) {
-              psProxy[k] = computed({
-                get: () => (state as any)[k],
-                set: value => commit(getSetterMutation(), { key: k, value }),
-              })
-            }
             const proxy = reactive({
               ...toRefs(pxStore),
-              ...psProxy,
             })
             return property.set!.call(proxy, payload)
           }
@@ -230,6 +213,9 @@ export const defineStore = <S extends {}, P extends {}, G, A, C, E>(
     }
 
     for (const key in defaultState) {
+      defineState(id, pxStore, () => store, key, subscribeCallbacks)
+    }
+    for (const key in defaultPrivateState) {
       defineState(id, pxStore, () => store, key, subscribeCallbacks)
     }
 

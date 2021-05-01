@@ -267,19 +267,6 @@ describe('index', () => {
 
         expect(vuexStore.state.abc.myValue).toBe(value)
       })
-
-      it('not accessible from store', () => {
-        const useStore = defineStore({
-          id: 'foo',
-          privateState: () => ({
-            value: 123,
-          }),
-        })
-
-        const store = useStore()
-
-        expect('value' in store).toBe(false)
-      })
     })
 
     describe('getters', () => {
@@ -880,6 +867,38 @@ describe('index', () => {
           vuexStore.commit(getSetterMutation('a'), { key: 'value', value })
 
           expect(b.value).toBe(value)
+        })
+
+        it('can get/set nested object', () => {
+          const useStore = defineStore({
+            id: 'store',
+            privateState: () => ({
+              name: {
+                first: 'jon',
+                last: 'davis',
+              },
+            }),
+            computed: {
+              get short(): { f: string; l: string } {
+                return {
+                  f: this.name.first,
+                  l: this.name.last,
+                }
+              },
+              set short(value) {
+                this.name.first = value.f
+                this.name.last = value.l
+              },
+            },
+          })
+
+          const store = useStore()
+
+          expect(store.short).toEqual({ f: 'jon', l: 'davis' })
+
+          store.short = { f: 'dave', l: 'jonson' }
+
+          expect(store.short).toEqual({ f: 'dave', l: 'jonson' })
         })
       })
     })
